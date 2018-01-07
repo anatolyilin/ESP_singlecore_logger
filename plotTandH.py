@@ -38,12 +38,14 @@ def plotDaily6h():
     yearsFmt = mdates.DateFormatter('%d-%m')
     fig, (T,H) = plt.subplots(2, sharex=True)
     T.plot(dataset['timestamp'], dataset['T'], color="blue", label="Temperature ['C]")
+    T.set_ylim([18, 25])
     T.grid(True)
     
     H.plot(dataset['timestamp'], dataset['H'], color="red", label="Rel. Humidity [%]")
     H.xaxis.set_major_locator(days)
     H.xaxis.set_major_formatter(yearsFmt)
     H.xaxis.set_minor_locator(hours)
+    
     H.grid(True)
     fig.legend()
     plt.show()
@@ -65,4 +67,4 @@ def plotHourly30m():
     fig.legend()
     plt.show()
     
-plotHourly30m()
+plotDaily6h()
