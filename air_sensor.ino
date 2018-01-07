@@ -77,6 +77,8 @@ bool SensorError = false;
 bool klok = true;
 bool suspended = false;
 
+uint64_t cardSize;
+
 void setup() {
   Serial.begin(9600);
   Serial.setDebugOutput(true);
@@ -597,7 +599,7 @@ void setupSD() {
     Serial.println("UNKNOWN");
   }
 
-  uint64_t cardSize = SD.cardSize() / (1024 * 1024);
+  cardSize = SD.cardSize() / (1024 * 1024);
   Serial.printf("SD Card Size: %lluMB\n", cardSize);
   writeScreenIN("SD size: ");
   char buffer[64];
@@ -606,7 +608,6 @@ void setupSD() {
   writeScreenIN(" MB");
   writeFile(SD, filename, "\n");
 }
-
 int fileSize(const char * path) {
   File myFile = SD.open(path);
 
@@ -691,8 +692,14 @@ void setupServer() {
     int cardSize = SD.cardSize() / (1024 * 1024);
     server.send(200, "text/html", "<html>SD size: " + String(cardSize) + " MB<br> Measurements used: " + (fileSize("/measurements.txt") / 1024) + " MB " + (file_line_num("/measurements.txt")) + " measurements </html>");
   });
+  server.on("/updatetime", []() {
+    updateTime();
+    server.sendHeader("Location", String("/"), true);
+    server.send ( 302, "text/plain", "");
 
+});
   server.on("/updates", []() {
+    suspended = true;
     screenRefRate = (server.arg("screenRefRate")).toInt();
     sensorRefRate = (server.arg("sensorRefRate")).toInt();
     TimeRefRateSh = (server.arg("TimeRefRateSh")).toInt();
@@ -701,23 +708,59 @@ void setupServer() {
     klok = (server.arg("klok")).toInt();
     display.dim(dim);
 
-    int screenRefRate = 100;
-    int sensorRefRate = 2000;
-    int TimeRefRateSh = 1000;
-    int TimeRefRateL = 108000;
+    String newfilename = (server.arg("file"));
+    strcpy(filename, newfilename.c_str());
 
     writeScreen("Config Updated..");
     Serial.println("config Updated");
     server.send(200, "text/plain", "Updated... ");
-    delay(5000);
+    suspended = false;
   });
   server.on("/config", []() {
     // server.send(200, "text/html", "<html><form action='/updates' method='post'>First name: <input type='text' name='D' value='John'><br><input type='submit' value='Submit'></form></html>");
-    server.send(200, "text/html", "<html><form action='/updates' method='post'><h3>Update intervals in ms</h3>Klok: <input type='text' name='klok' value='0'><br>Dim: <input type='text' name='dim' value='0'><br>Screen Refresh rate: <input type='text' name='screenRefRate' value=" + String(screenRefRate) + "><br>Sensor Refresh rate: <input type='text' name='sensorRefRate' value=" + String(sensorRefRate) + "><br>Time update interval (fail): <input type='text' name='TimeRefRateSh' value=" + String(TimeRefRateSh) + "><br>Time update interval (normal): <input type='text' name='TimeRefRateL' value=" + String(TimeRefRateL) + "><br><input type='submit' value='Submit'></form></html>");
+    // server.send(200, "text/html", "<html><form action='/updates' method='post'><h3>Update intervals in ms</h3>Klok: <input type='text' name='klok' value='0'><br>Dim: <input type='text' name='dim' value='0'><br>Screen Refresh rate: <input type='text' name='screenRefRate' value=" + String(screenRefRate) + "><br>Sensor Refresh rate: <input type='text' name='sensorRefRate' value=" + String(sensorRefRate) + "><br>Time update interval (fail): <input type='text' name='TimeRefRateSh' value=" + String(TimeRefRateSh) + "><br>Time update interval (normal): <input type='text' name='TimeRefRateL' value=" + String(TimeRefRateL) + "><br><input type='submit' value='Submit'></form></html>");
+    String page = "<!doctype html>"
+"<html lang=\"en\">"
+"<head>"
+"  <meta charset=\"utf-8\">"
+"  <title>Sensor Config</title>"
+"</head>"
+"<body>"
+"    <form action='/updates' method='post'>"
+"        Klok mode: <input type=\"text\" name=\"klok\" value=\"0\"><br>"
+"        Changes the screen layout from normal (1) to debug (0). <br>"
+"        Dim mode: <input type=\"text\" name=\"dim\" value=\"0\"><br>"
+"        Setting dim to 1, will decrease screen brightness. <br>"
+"        Screen Refresh rate: <input type=\"text\" name=\"screenRefRate\" value=" + String(screenRefRate) + "> ms<br>"
+"        The default screen refresh rate is 100 ms. <br>"
+"        Sensor Refresh rate: <input type=\"text\" name=\"sensorRefRate\" value=" + String(sensorRefRate) + "> ms<br>"
+"        The default sensor measurement rate is 2s = 2000ms. <br>"
+"        Time update interval (fail): <input type=\"text\" name=\"TimeRefRateSh\" value=" + String(TimeRefRateSh) + ">ms<br>"
+"        Time update interval (normal): <input type=\"text\" name=\"TimeRefRateL\" value=" + String(TimeRefRateL) + ">ms<br>"
+"        Fail interval is the interval between clock update attempts in case the clock is not correctly initiliated on boot (e.g. boot without internet connection). Normal interval is the interval for clock updates in non-failed mode.<br>"
+"        Filename: <input type=\"text\" name=\"file\" value="+String(filename)+"><br>"
+"        <input type='submit' value='Submit'>"
+"    </form>"
+"    <form method=\"get\" action=\"/updatetime\">"
+"        <button type=\"submit\">Update Time</button>"
+"    </form>"
+"</body>"
+"</html>";
+server.send(200, "text/html", page);
   });
   server.begin();
 }
 void rootPage() {
+
+
+  File file = SD.open(filename);
+  size_t len = 0;
+  if (file) {
+    len = file.size();
+  }
+  file.close();
+
+
   String html = "You just loaded the ROOT of your ESP WebServer<br><br><a href=\"/temp\">Goto /test</a>";
   server.setContentLength(html.length());
   server.send(200, "text/html", html);
@@ -732,7 +775,6 @@ void humidPage() {
   server.setContentLength(html.length());
   server.send(200, "text/html", html);
 }
-
 void getMeasurements(){
 
   String filetitle = "measurement"+  String(year())+addZero(month())+addZero(day())+addZero(hour())+addZero(minute()) +".txt";
