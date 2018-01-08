@@ -12,6 +12,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <ESP32WebServer.h>
+#include <ESPmDNS.h>
 
 #define TIME_MSG_LEN 11
 #define TIME_HEADER 'T'
@@ -152,6 +153,14 @@ void setupWifi() {
   Serial.print("Connected, IP address: ");
   writeScreenIN(String(WiFi.localIP()));
   Serial.println(WiFi.localIP());
+
+
+    if (!MDNS.begin("sensor")) {
+        writeScreenError("Error setting up mDNS");
+        delay(2000);
+    }
+
+
 }
 void setupNTPtime() {
   Serial.print("Starting UDP");
@@ -780,8 +789,8 @@ int ret = snprintf(buffer, sizeof buffer, "%d", cardSize);
 "  <title>Sensor Config</title>"
 "</head>"
 "<body>"
-"    <h1>"+String(hour()) + ":" + String(minute())+"</h1>"
-"    <h4>"+String(day()) + "  " + String(month())+ "  " + String(year())+"</h4>"
+"    <h1>"+String(hour()) + ":" + addZero(minute())+"</h1>"
+"    <h4>"+String(day()) + " - " + String(month())+ " - " + String(year())+"</h4>"
 "    <h3> "+humid + " %  <br> "
 " "+   temp + " \'C </h3>"
 "    SD cardsize: "+String(size2) +" MB <br>"
