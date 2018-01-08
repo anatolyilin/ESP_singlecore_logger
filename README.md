@@ -1,4 +1,4 @@
-# ESP singlecore logger
+# ESP singlecore logger: air_sensor.ino
 Simple Temperature and Humidity logger using AM2301 sensor, SD card and I2C OLED. 
 
 Running on ESP32 (DOIT devkit v1.0), but is meant for ESP8266, hence the single core utilization.
@@ -23,3 +23,6 @@ MOSO - D19<br>
 MOSI - D23<br>
 SCK&nbsp;  - D18<br>
 CS &nbsp;&nbsp;  - D5
+
+# ESP singlecore logger: plotTandH.py
+Very basic way python script to plot the data. 
