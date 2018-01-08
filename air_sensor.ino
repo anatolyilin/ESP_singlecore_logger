@@ -69,7 +69,10 @@ unsigned long TimeUpdateL = 0;
 int screenRefRate = 100;
 int sensorRefRate = 2000;
 int TimeRefRateSh = 1000;
-int TimeRefRateL = 108000;
+int TimeRefRateL = 1800000;
+
+int TouchRefRate = 500;
+unsigned long TouchUpdate = 0;
 
 bool SDerror = false;
 bool WifiError = false;
@@ -78,9 +81,16 @@ bool SensorError = false;
 bool klok = true;
 bool suspended = false;
 
+bool ScreenOn = true;
+bool manualmode = false;
+bool ondemandScreen = false;
+int screenOntime = 5000;
+
 String boottime ="";
 
 uint64_t cardSize;
+
+int touchVal = 0;
 
 void setup() {
   Serial.begin(9600);
@@ -96,6 +106,7 @@ void setup() {
   setupSD();
   setupWifi();
   delay(500);
+  setupTouch();
   writeScreen("Wifi connected");
   setupSensor();
   setupNTPtime();
@@ -109,6 +120,14 @@ void setup() {
   TimerScreen = millis();
   TimerSensor = millis();
 
+}
+void setupTouch(){
+  int tempT = 0;
+
+  for(int i=0; i<20; i++){
+    tempT += touchRead(T4);
+  }
+  touchVal = tempT/20;
 }
 void setupWifi() {
 
@@ -178,7 +197,12 @@ void updateTime() {
   writeScreen("Time updated !");
   if (boottime.equals("") && now() > 1515440167 ) {
     // boottime not yet set, perhaps time update failed
-    boottime =  addZero(day()) + "-" + addZero(month()) + "-" + addZero(year()) + "," + addZero(hour()) + ":" + addZero(minute()) + ":" + addZero(second());
+    boottime =  addZero(day()) + "-" + addZero(month()) + "-" + addZero(year()) + "  " + addZero(hour()) + ":" + addZero(minute()) + ":" + addZero(second());
+  }
+  if (hour() < 6 && !manualmode ){
+    TurnScreenOff();
+  } else if(!manualmode && !ondemandScreen) {
+    TurnScreenOn();
   }
 }
 void printTime() {
@@ -239,7 +263,7 @@ void ReadHumidity() {
 
   if (isnan(event.relative_humidity) && humid_read < 15) {
     Serial.println("Error reading temperature!");
-    writeScreenError("Error reading temperature!");
+    // writeScreenError("Error reading temperature!");
     ReadHumidity();
     humid_read++;
   } else {
@@ -253,7 +277,7 @@ void ReadTemperature() {
 
   if (isnan(event.temperature) && temp_read < 15) {
     Serial.println("Error reading temperature!");
-    writeScreenError("Error reading temperature!");
+    // writeScreenError("Error reading temperature!");
     ReadTemperature();
     temp_read++;
   } else {
@@ -281,15 +305,31 @@ void WriteMeasurement() {
   appendFile(SD, filename, content);
 }
 void loop() {
+
   server.handleClient();
 
   if (!suspended) {
+        int tempval = 0;
+        for(int i = 0; i < 4; i++){
+          tempval += touchRead(T4);
+        }
+        tempval = tempval /4;
 
-    if (millis() - TimerScreen >= screenRefRate && !klok) {
+     if (millis() - TouchUpdate >= TouchRefRate && tempval < (touchVal - 30) ) {
+        toggleScreen();
+        TouchUpdate = millis();
+     }
+
+ if (millis() - TouchUpdate >= screenOntime && ondemandScreen  ) {
+        TurnScreenOff();
+        TouchUpdate = millis();
+     }
+
+    if (millis() - TimerScreen >= screenRefRate && !klok && ScreenOn) {
       SensorSc();
       TimerScreen = millis();
     }
-    if (millis() - TimerScreen >= screenRefRate && klok) {
+    if (millis() - TimerScreen >= screenRefRate && klok && ScreenOn) {
       klokSc();
       TimerScreen = millis();
     }
@@ -504,7 +544,7 @@ void appendFile(fs::FS & fs,
     return;
   }
   if (file.print(message)) {
-    Serial.println("Message appended");
+    //Serial.println("Message appended");
   } else {
     Serial.println("Append failed");
     writeScreenError("Append FAILED");
@@ -697,6 +737,25 @@ void testScreen() {
     delay(2000);
   }
 }
+void toggleScreen(){
+  if (ScreenOn) {
+    TurnScreenOff();
+  } else {
+    TurnScreenOn();
+  }
+}
+
+void TurnScreenOff(){
+  display.ssd1306_command(SSD1306_DISPLAYOFF);
+  ScreenOn = false;
+}
+
+void TurnScreenOn(){
+  display.ssd1306_command(SSD1306_DISPLAYON);
+  ScreenOn = true;
+}
+
+
 void setupServer() {
   server.on("/", rootPage);
   server.on("/temp", tempPage);
@@ -736,10 +795,13 @@ void setupServer() {
     sensorRefRate = (server.arg("sensorRefRate")).toInt();
     TimeRefRateSh = (server.arg("TimeRefRateSh")).toInt();
     TimeRefRateL = (server.arg("TimeRefRateL")).toInt();
+touchVal = (server.arg("touchVal")).toInt();
+ondemandScreen = (server.arg("ondemandScreen")).toInt();
+screenOntime = (server.arg("screenOntime")).toInt();
     int dim = (server.arg("dim")).toInt();
     klok = (server.arg("klok")).toInt();
     display.dim(dim);
-
+    manualmode = (server.arg("manualmode")).toInt();
     String newfilename = (server.arg("file"));
     strcpy(filename, newfilename.c_str());
 
@@ -766,8 +828,12 @@ String page = "<!doctype html>"
     "        Setting dim to 1, will decrease screen brightness. <br>"
     "        Screen Refresh rate: <input type=\"text\" name=\"screenRefRate\" value=" + String(screenRefRate) + "> ms<br>"
     "        The default screen refresh rate is 100 ms. <br>"
+    "        Night off - Day on mode: <input type=\"text\" name=\"manualmode\" value=" + String(manualmode) + "> <br>"
+    "        Calibration value TouchSensor: <input type=\"text\" name=\"touchVal\" value=" + String(touchVal) + "> <br>"
     "        Sensor Refresh rate: <input type=\"text\" name=\"sensorRefRate\" value=" + String(sensorRefRate) + "> ms<br>"
     "        The default sensor measurement rate is 2s = 2000ms. <br>"
+        "        OnDemand Screen mode: <input type=\"text\" name=\"ondemandScreen\" value=" + String(ondemandScreen) + "> <br>"
+         "        OnDemand Screen ON time: <input type=\"text\" name=\"screenOntime\" value=" + String(screenOntime) + "> <br>"
     "        Time update interval (fail): <input type=\"text\" name=\"TimeRefRateSh\" value=" + String(TimeRefRateSh) + ">ms<br>"
     "        Time update interval (normal): <input type=\"text\" name=\"TimeRefRateL\" value=" + String(TimeRefRateL) + ">ms<br>"
     "        Fail interval is the interval between clock update attempts in case the clock is not correctly initiliated on boot (e.g. boot without internet connection). Normal interval is the interval for clock updates in non-failed mode.<br>"
@@ -815,6 +881,9 @@ suspended = false;
 "    <h3> "+humid + " %  <br> "
 " "+   temp + " \'C </h3>"
 "Up since " + boottime + "<br>"
+"Screen on: " + ScreenOn + "<br>"
+"Touch Calibration value " + touchVal +"<br>"
+"Current touch value (onpage load) " +  String(touchRead(T4)) +"<br>"
 "    SD cardsize: "+String(size2) +" MB <br>"
 "    Measurement file size: "+len+" B <br>"
 "    Measurement file size: "+len/1024 +" kB <br>"
