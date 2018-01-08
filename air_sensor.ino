@@ -78,6 +78,8 @@ bool SensorError = false;
 bool klok = true;
 bool suspended = false;
 
+String boottime ="";
+
 uint64_t cardSize;
 
 void setup() {
@@ -174,6 +176,10 @@ void setupNTPtime() {
 void updateTime() {
   setSyncProvider(getNtpTime);
   writeScreen("Time updated !");
+  if (boottime.equals("") && now() > 1515440167 ) {
+    // boottime not yet set, perhaps time update failed
+    boottime =  addZero(day()) + "-" + addZero(month()) + "-" + addZero(year()) + "," + addZero(hour()) + ":" + addZero(minute()) + ":" + addZero(second());
+  }
 }
 void printTime() {
   Serial.print(hour());
@@ -288,7 +294,7 @@ void loop() {
       TimerScreen = millis();
     }
 
-    if (millis() - TimeUpdateSh >= TimeRefRateSh && now() < 1000) {
+    if (millis() - TimeUpdateSh >= TimeRefRateSh && now() < 1515440167) {
       updateTime();
       TimeUpdateSh = millis();
     }
@@ -615,7 +621,7 @@ void setupSD() {
   int ret = snprintf(buffer, sizeof buffer, "%d", cardSize);
   writeScreenIN((buffer));
   writeScreenIN(" MB");
-  writeFile(SD, filename, "\n");
+  // writeFile(SD, filename, "\n");
 }
 int fileSize(const char * path) {
   File myFile = SD.open(path);
@@ -697,6 +703,23 @@ void setupServer() {
   server.on("/humid", humidPage);
   server.on("/getMeasurements", getMeasurements);
   server.on("/deleteMeasurements", deleteMeasurements);
+    server.on("/screenoff", []() {
+  suspended = true;
+  display.ssd1306_command(SSD1306_DISPLAYOFF);
+         server.sendHeader("Location", String("/"), true);
+          server.send ( 302, "text/plain", "");
+          delay(200);
+          suspended = false;
+      });
+
+     server.on("/screenon", []() {
+        suspended = true;
+         display.ssd1306_command(SSD1306_DISPLAYON);
+         server.sendHeader("Location", String("/"), true);
+          server.send ( 302, "text/plain", "");
+         delay(200);
+          suspended = false;
+      });
   server.on("/status", []() {
     int cardSize = SD.cardSize() / (1024 * 1024);
     server.send(200, "text/html", "<html>SD size: " + String(cardSize) + " MB<br> Measurements used: " + (fileSize("/measurements.txt") / 1024) + " MB " + (file_line_num("/measurements.txt")) + " measurements </html>");
@@ -729,48 +752,46 @@ void setupServer() {
   server.on("/config", []() {
     // server.send(200, "text/html", "<html><form action='/updates' method='post'>First name: <input type='text' name='D' value='John'><br><input type='submit' value='Submit'></form></html>");
     // server.send(200, "text/html", "<html><form action='/updates' method='post'><h3>Update intervals in ms</h3>Klok: <input type='text' name='klok' value='0'><br>Dim: <input type='text' name='dim' value='0'><br>Screen Refresh rate: <input type='text' name='screenRefRate' value=" + String(screenRefRate) + "><br>Sensor Refresh rate: <input type='text' name='sensorRefRate' value=" + String(sensorRefRate) + "><br>Time update interval (fail): <input type='text' name='TimeRefRateSh' value=" + String(TimeRefRateSh) + "><br>Time update interval (normal): <input type='text' name='TimeRefRateL' value=" + String(TimeRefRateL) + "><br><input type='submit' value='Submit'></form></html>");
-    String page = "<!doctype html>"
-"<html lang=\"en\">"
-"<head>"
-"  <meta charset=\"utf-8\">"
-"  <title>Sensor Config</title>"
-"</head>"
-"<body>"
-"    <form action='/updates' method='post'>"
-"        Klok mode: <input type=\"text\" name=\"klok\" value=\"0\"><br>"
-"        Changes the screen layout from normal (1) to debug (0). <br>"
-"        Dim mode: <input type=\"text\" name=\"dim\" value=\"0\"><br>"
-"        Setting dim to 1, will decrease screen brightness. <br>"
-"        Screen Refresh rate: <input type=\"text\" name=\"screenRefRate\" value=" + String(screenRefRate) + "> ms<br>"
-"        The default screen refresh rate is 100 ms. <br>"
-"        Sensor Refresh rate: <input type=\"text\" name=\"sensorRefRate\" value=" + String(sensorRefRate) + "> ms<br>"
-"        The default sensor measurement rate is 2s = 2000ms. <br>"
-"        Time update interval (fail): <input type=\"text\" name=\"TimeRefRateSh\" value=" + String(TimeRefRateSh) + ">ms<br>"
-"        Time update interval (normal): <input type=\"text\" name=\"TimeRefRateL\" value=" + String(TimeRefRateL) + ">ms<br>"
-"        Fail interval is the interval between clock update attempts in case the clock is not correctly initiliated on boot (e.g. boot without internet connection). Normal interval is the interval for clock updates in non-failed mode.<br>"
-"        Filename: <input type=\"text\" name=\"file\" value="+String(filename)+"><br>"
-"        <input type='submit' value='Submit'>"
-"    </form>"
-"    <form method=\"get\" action=\"/updatetime\">"
-"        <button type=\"submit\">Update Time</button>"
-"    </form>"
-"    <form method=\"get\" action=\"/getMeasurements\">"
-"        <button type=\"submit\">Get Measurements</button>"
-"    </form>"
-"    <form method=\"get\" action=\"/deleteMeasurements\">"
-"        <button type=\"submit\">Delete Measurements</button>"
-"    </form>"
-"</body>"
-"</html>";
-
-
-server.send(200, "text/html", page);
+String page = "<!doctype html>"
+    "<html lang=\"en\">"
+    "<head>"
+    "  <meta charset=\"utf-8\">"
+    "  <title>Sensor Config</title>"
+    "</head>"
+    "<body>"
+    "    <form action='/updates' method='post'>"
+    "        Klok mode: <input type=\"text\" name=\"klok\" value=\"1\"><br>"
+    "        Changes the screen layout from normal (1) to debug (0). <br>"
+    "        Dim mode: <input type=\"text\" name=\"dim\" value=\"0\"><br>"
+    "        Setting dim to 1, will decrease screen brightness. <br>"
+    "        Screen Refresh rate: <input type=\"text\" name=\"screenRefRate\" value=" + String(screenRefRate) + "> ms<br>"
+    "        The default screen refresh rate is 100 ms. <br>"
+    "        Sensor Refresh rate: <input type=\"text\" name=\"sensorRefRate\" value=" + String(sensorRefRate) + "> ms<br>"
+    "        The default sensor measurement rate is 2s = 2000ms. <br>"
+    "        Time update interval (fail): <input type=\"text\" name=\"TimeRefRateSh\" value=" + String(TimeRefRateSh) + ">ms<br>"
+    "        Time update interval (normal): <input type=\"text\" name=\"TimeRefRateL\" value=" + String(TimeRefRateL) + ">ms<br>"
+    "        Fail interval is the interval between clock update attempts in case the clock is not correctly initiliated on boot (e.g. boot without internet connection). Normal interval is the interval for clock updates in non-failed mode.<br>"
+    "        Filename: <input type=\"text\" name=\"file\" value="+String(filename)+"><br>"
+    "        <input type='submit' value='Submit'>"
+    "    </form>"
+    "    <form method=\"get\" action=\"/updatetime\">"
+    "        <button type=\"submit\">Update Time</button>"
+    "    </form>"
+    "    <form method=\"get\" action=\"/getMeasurements\">"
+    "        <button type=\"submit\">Get Measurements</button>"
+    "    </form>"
+    "    <form method=\"get\" action=\"/deleteMeasurements\">"
+    "        <button type=\"submit\">Delete Measurements</button>"
+    "    </form>"
+    "</body>"
+    "</html>";
+    server.send(200, "text/html", page);
   });
   server.begin();
 }
 void rootPage() {
 
-
+suspended = true ;
   File file = SD.open(filename);
   size_t len = 0;
   if (file) {
@@ -782,7 +803,7 @@ char buffer[64];
 int test = int(cardSize);
 float size2 = test/1.0;
 int ret = snprintf(buffer, sizeof buffer, "%d", cardSize);
-
+suspended = false;
   String html = "<html lang=\"en\">"
 "<head>"
 "  <meta charset=\"utf-8\">"
@@ -793,6 +814,7 @@ int ret = snprintf(buffer, sizeof buffer, "%d", cardSize);
 "    <h4>"+String(day()) + " - " + String(month())+ " - " + String(year())+"</h4>"
 "    <h3> "+humid + " %  <br> "
 " "+   temp + " \'C </h3>"
+"Up since " + boottime + "<br>"
 "    SD cardsize: "+String(size2) +" MB <br>"
 "    Measurement file size: "+len+" B <br>"
 "    Measurement file size: "+len/1024 +" kB <br>"
@@ -800,7 +822,10 @@ int ret = snprintf(buffer, sizeof buffer, "%d", cardSize);
 "    <form method=\"get\" action=\"/getMeasurements\">"
 "        <button type=\"submit\">Get Measurements</button>"
 "    </form>"
-"<a href=\"/config\">config</a>"
+ "<a href=\"/config\">config</a><br>"
+ "<a href=\"/screenoff\">screen OFF</a><br>"
+"<a href=\"/screenon\">screen ON</a><br>"
+ "Free HEAP: "+ ESP.getFreeHeap() + " "
 "</body>"
 "</html>";
 
