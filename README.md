@@ -25,4 +25,4 @@ SCK&nbsp;  - D18<br>
 CS &nbsp;&nbsp;  - D5
 
 # ESP singlecore logger: plotTandH.py
-Very basic way python script to plot the data. 
+Very basic python script to plot the data. 
