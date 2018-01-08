@@ -687,7 +687,7 @@ void setupServer() {
   server.on("/temp", tempPage);
   server.on("/humid", humidPage);
   server.on("/getMeasurements", getMeasurements);
-
+  server.on("/deleteMeasurements", deleteMeasurements);
   server.on("/status", []() {
     int cardSize = SD.cardSize() / (1024 * 1024);
     server.send(200, "text/html", "<html>SD size: " + String(cardSize) + " MB<br> Measurements used: " + (fileSize("/measurements.txt") / 1024) + " MB " + (file_line_num("/measurements.txt")) + " measurements </html>");
@@ -713,7 +713,8 @@ void setupServer() {
 
     writeScreen("Config Updated..");
     Serial.println("config Updated");
-    server.send(200, "text/plain", "Updated... ");
+    server.sendHeader("Location", String("/"), true);
+    server.send ( 302, "text/plain", "");
     suspended = false;
   });
   server.on("/config", []() {
@@ -744,8 +745,16 @@ void setupServer() {
 "    <form method=\"get\" action=\"/updatetime\">"
 "        <button type=\"submit\">Update Time</button>"
 "    </form>"
+"    <form method=\"get\" action=\"/getMeasurements\">"
+"        <button type=\"submit\">Get Measurements</button>"
+"    </form>"
+"    <form method=\"get\" action=\"/deleteMeasurements\">"
+"        <button type=\"submit\">Delete Measurements</button>"
+"    </form>"
 "</body>"
 "</html>";
+
+
 server.send(200, "text/html", page);
   });
   server.begin();
@@ -760,10 +769,43 @@ void rootPage() {
   }
   file.close();
 
+char buffer[64];
+int test = int(cardSize);
+float size2 = test/1.0;
+int ret = snprintf(buffer, sizeof buffer, "%d", cardSize);
 
-  String html = "You just loaded the ROOT of your ESP WebServer<br><br><a href=\"/temp\">Goto /test</a>";
+  String html = "<html lang=\"en\">"
+"<head>"
+"  <meta charset=\"utf-8\">"
+"  <title>Sensor Config</title>"
+"</head>"
+"<body>"
+"    <h1>"+String(hour()) + ":" + String(minute())+"</h1>"
+"    <h4>"+String(day()) + "  " + String(month())+ "  " + String(year())+"</h4>"
+"    <h3> "+humid + " %  <br> "
+" "+   temp + " \'C </h3>"
+"    SD cardsize: "+String(size2) +" MB <br>"
+"    Measurement file size: "+len+" B <br>"
+"    Measurement file size: "+len/1024 +" kB <br>"
+"    Measurement file size: "+len/(1024*1024)+" MB <br>"
+"    <form method=\"get\" action=\"/getMeasurements\">"
+"        <button type=\"submit\">Get Measurements</button>"
+"    </form>"
+"<a href=\"/config\">config</a>"
+"</body>"
+"</html>";
+
   server.setContentLength(html.length());
   server.send(200, "text/html", html);
+}
+
+void deleteMeasurements() {
+  suspended = true;
+  deleteFile(SD,  filename) ;
+  delay(200);
+  suspended = false;
+  server.sendHeader("Location", String("/"), true);
+  server.send ( 302, "text/plain", "");
 }
 void tempPage() {
   String html = String(temp);
@@ -779,6 +821,8 @@ void getMeasurements(){
 
   String filetitle = "measurement"+  String(year())+addZero(month())+addZero(day())+addZero(hour())+addZero(minute()) +".txt";
   downloadFile(filename, filetitle);
+  server.sendHeader("Location", String("/"), true);
+  server.send ( 302, "text/plain", "");
 }
 void downloadFile(const char * path, String filetitle) {
 
